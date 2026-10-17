@@ -106,15 +106,15 @@ Agents act only inside their role. Anything that costs money, risks a customer, 
 
 **Remixed using [OMGithub.com](https://omgithub.com).**
 
-[![OMGithub](https://img.shields.io/badge/OMGithub-Open%20project-orange?style=for-the-badge)](https://omgithub.com/Leonydis138/vantage-ars)
-[![GitHub](https://img.shields.io/badge/GitHub-Source-181717?logo=github&style=for-the-badge)](https://github.com/Leonydis138/vantage-ars)
+[![OMGithub](https://img.shields.io/badge/OMGithub-Open%20project-orange?style=for-the-badge)](https://omgithub.com/Leonydis137/vantage-ars)
+[![GitHub](https://img.shields.io/badge/GitHub-Source-181717?logo=github&style=for-the-badge)](https://github.com/Leonydis137/vantage-ars)
 
-- 🎮 [Open the project](https://omgithub.com/Leonydis138/vantage-ars).
-- ✨ [Remix this project](https://omgithub.com/?remix=Leonydis138%2Fvantage-ars).
-- 💻 [Explore the source](https://github.com/Leonydis138/vantage-ars).
-- 🛠️ [Check build runs](https://github.com/Leonydis138/vantage-ars/actions).
-- 🐛 [Report an issue](https://github.com/Leonydis138/vantage-ars/issues).
-- 👤 [Explore the creator's projects](https://omgithub.com/Leonydis138).
+- 🎮 [Open the project](https://omgithub.com/Leonydis137/vantage-ars).
+- ✨ [Remix this project](https://omgithub.com/?remix=Leonydis137%2Fvantage-ars).
+- 💻 [Explore the source](https://github.com/Leonydis137/vantage-ars).
+- 🛠️ [Check build runs](https://github.com/Leonydis137/vantage-ars/actions).
+- 🐛 [Report an issue](https://github.com/Leonydis137/vantage-ars/issues).
+- 👤 [Explore the creator's projects](https://omgithub.com/Leonydis137).
 - 🌍 [Create with OMGithub](https://omgithub.com).
-- 🧬 [Explore the remix source](https://github.com/leonydis138/vantage-ars/tree/91853668cbc91760ebb2ac0fd0cc2f5e5395d4b6).
+- 🧬 [Explore the remix source](https://github.com/Leonydis137/vantage-ars).
 <!-- omgithub:readme:end -->
