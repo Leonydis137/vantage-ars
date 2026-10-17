@@ -1,4 +1,4 @@
-name: OpenCode
+name: OpenCode (debug-and-run-enhanced)
 run-name: "OpenCode #${{ github.event.issue.number || inputs.issue_number }}${{ github.event.issue.title && format(' — {0}', github.event.issue.title) || '' }}"
 
 on:
@@ -11,11 +11,19 @@ on:
         required: true
         type: string
 
-permissions: {}
+permissions:
+  contents: read
+  issues: write
+  actions: read
 
 concurrency:
   group: opencode-issue-${{ github.repository }}-${{ github.event.issue.number || inputs.issue_number }}
   cancel-in-progress: false
+
+env:
+  # fallback ports used by opencode if not provided by reusable workflow/runtime
+  DEFAULT_OPENCODE_WEB_PORT: 40453
+  MAX_HEARTBEAT_WAIT_SECONDS: 120
 
 jobs:
   prepare:
@@ -29,15 +37,227 @@ jobs:
     with:
       runtime_ref: 1ed0818c6f6bde3293b127c17668fcad4b02c347
 
-  opencode:
+  preflight:
     needs: prepare
     if: needs.prepare.outputs.approved == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    outputs:
+      cloudflared_asset: ${{ steps.select.outputs.asset }}
+      preflight_passed: ${{ steps.select.outputs.passed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install helpers (jq, unzip)
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y jq unzip curl tar lsof iproute2 net-tools || true
+
+      - name: Select cloudflared asset, try cache, download & validate
+        id: select
+        run: |
+          set -euxo pipefail
+
+          # Detect architecture (RUNNER_ARCH may be set by GitHub)
+          ARCH=${RUNNER_ARCH:-}
+          if [ -z "$ARCH" ]; then
+            UARCH=$(uname -m || echo x86_64)
+            case "$UARCH" in
+              x86_64|amd64) ARCH=X64 ;;
+              aarch64|arm64) ARCH=ARM64 ;;
+              *) ARCH=X64 ;;
+            esac
+          fi
+          OS=${RUNNER_OS:-Linux}
+          case "$OS/$ARCH" in
+            Linux/X64) ASSET=cloudflared-linux-amd64 ;;
+            Linux/ARM64) ASSET=cloudflared-linux-arm64 ;;
+            macOS/X64) ASSET=cloudflared-darwin-amd64.tgz ;;
+            macOS/ARM64) ASSET=cloudflared-darwin-arm64.tgz ;;
+            Windows/*) ASSET=cloudflared-windows-amd64.exe ;;
+            *) ASSET=cloudflared-linux-amd64 ;;
+          esac
+          echo "Selected cloudflared asset: $ASSET"
+
+          # Use actions/cache-like directory for local reuse between steps in this workflow
+          CACHE_DIR="$RUNNER_TEMP/cloudflared-cache"
+          mkdir -p "$CACHE_DIR"
+          CACHE_PATH="$CACHE_DIR/$ASSET"
+
+          # If we already downloaded this run, reuse it
+          if [ -f "$CACHE_PATH" ]; then
+            echo "Using cached cloudflared at $CACHE_PATH"
+            echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
+            echo "passed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Helper: retry wrapper with exponential backoff
+          retry() {
+            local -r max_attempts=${1:-5}; shift
+            local -r cmd=( "$@" )
+            local attempt=1
+            local delay=1
+            while true; do
+              if "${cmd[@]}"; then
+                return 0
+              fi
+              attempt=$((attempt + 1))
+              if [ $attempt -gt $max_attempts ]; then
+                echo "Command failed after $max_attempts attempts: ${cmd[*]}"
+                return 1
+              fi
+              echo "Retrying in $delay seconds..."
+              sleep $delay
+              delay=$((delay * 2))
+            done
+          }
+
+          URL="https://github.com/cloudflare/cloudflared/releases/latest/download/${ASSET}"
+          echo "Attempting HEAD on $URL"
+          HEAD_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -IL "$URL" || echo "000")
+          echo "HEAD HTTP status: $HEAD_STATUS"
+
+          TMPDIR=$(mktemp -d)
+          OUT_TGZ="$TMPDIR/cloudflared.tgz"
+          OUT_BIN="$TMPDIR/cloudflared"
+
+          DOWNLOAD_OK=false
+
+          # First try direct download (handles redirect to real release)
+          if [[ "$ASSET" == *.tgz ]]; then
+            if retry 3 curl --fail --silent --show-error --location --output "$OUT_TGZ" "$URL"; then
+              echo "Downloaded TGZ to $OUT_TGZ"
+              if tar -tzf "$OUT_TGZ" >/dev/null 2>&1; then
+                echo "TGZ looks valid"
+                DOWNLOAD_OK=true
+              else
+                echo "::warning::TGZ downloaded but tar inspection failed"
+              fi
+            else
+              echo "::warning::Direct download via redirect failed; will try GitHub Releases API"
+            fi
+          else
+            if retry 3 curl --fail --silent --show-error --location --output "$OUT_BIN" "$URL"; then
+              chmod +x "$OUT_BIN" || true
+              if "$OUT_BIN" --version >/dev/null 2>&1; then
+                echo "cloudflared binary runs: $($OUT_BIN --version | head -n1)"
+              else
+                echo "::warning::cloudflared --version did not run (may still be ok)"
+              fi
+              DOWNLOAD_OK=true
+            else
+              echo "::warning::Direct binary download failed; will try GitHub Releases API"
+            fi
+          fi
+
+          # If direct method failed, query GitHub Releases API to find the exact asset browser_download_url
+          if [ "$DOWNLOAD_OK" != "true" ]; then
+            echo "Querying GitHub Releases API for cloudflared asset"
+            API_URL="https://api.github.com/repos/cloudflare/cloudflared/releases/latest"
+            if curl -sSf "$API_URL" -o "$TMPDIR/release.json"; then
+              ASSET_URL=$(jq -r --arg name "$ASSET" '.assets[] | select(.name == $name) | .browser_download_url' "$TMPDIR/release.json" || true)
+              if [ -n "$ASSET_URL" ] && [ "$ASSET_URL" != "null" ]; then
+                echo "Found asset URL: $ASSET_URL"
+                if [[ "$ASSET" == *.tgz ]]; then
+                  if retry 3 curl --fail --silent --show-error --location --output "$OUT_TGZ" "$ASSET_URL"; then
+                    if tar -tzf "$OUT_TGZ" >/dev/null 2>&1; then
+                      echo "TGZ downloaded via API and looks valid"
+                      DOWNLOAD_OK=true
+                    fi
+                  fi
+                else
+                  if retry 3 curl --fail --silent --show-error --location --output "$OUT_BIN" "$ASSET_URL"; then
+                    chmod +x "$OUT_BIN" || true
+                    DOWNLOAD_OK=true
+                  fi
+                fi
+              else
+                echo "::warning::Could not find asset name $ASSET in release.json"
+              fi
+            else
+              echo "::warning::Failed to query GitHub Releases API"
+            fi
+          fi
+
+          # Final validation: for tgz, try extracting the 'cloudflared' binary to cache; for binary, move to cache
+          if [ "$DOWNLOAD_OK" = "true" ]; then
+            if [[ "$ASSET" == *.tgz ]]; then
+              tar -xzf "$OUT_TGZ" -C "$TMPDIR" || true
+              if [ -f "$TMPDIR/cloudflared" ]; then
+                mv "$TMPDIR/cloudflared" "$CACHE_PATH" || cp "$TMPDIR/cloudflared" "$CACHE_PATH"
+                chmod +x "$CACHE_PATH" || true
+              else
+                echo "::warning::Expected cloudflared inside TGZ not found"
+                # try to find binary in extracted files
+                found=$(find "$TMPDIR" -type f -name 'cloudflared' | head -n1 || true)
+                if [ -n "$found" ]; then
+                  mv "$found" "$CACHE_PATH" || cp "$found" "$CACHE_PATH"
+                  chmod +x "$CACHE_PATH"
+                else
+                  echo "::warning::No binary found inside TGZ after extraction"
+                fi
+              fi
+            else
+              mv "$OUT_BIN" "$CACHE_PATH" || cp "$OUT_BIN" "$CACHE_PATH"
+              chmod +x "$CACHE_PATH" || true
+            fi
+            if [ -f "$CACHE_PATH" ]; then
+              echo "Saved cloudflared to cache: $CACHE_PATH"
+              if "$CACHE_PATH" --version >/dev/null 2>&1; then
+                echo "Cached cloudflared runs: $($CACHE_PATH --version | head -n1)"
+              fi
+              echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
+              echo "passed=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
+          # If we reach here, preflight did not successfully produce a runnable cloudflared
+          echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
+          echo "passed=false" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload preflight artifact (cached cloudflared if present)
+        if: always()
+        run: |
+          set -euxo pipefail
+          CACHE_DIR="$RUNNER_TEMP/cloudflared-cache"
+          ASSET="${{ steps.select.outputs.asset }}"
+          CACHE_PATH="$CACHE_DIR/$ASSET"
+          if [ -f "$CACHE_PATH" ]; then
+            mkdir -p artifacts || true
+            cp "$CACHE_PATH" artifacts/ || true
+            echo "Copied cached cloudflared to artifacts/"
+          else
+            echo "No cached cloudflared to upload"
+          fi
+        continue-on-error: true
+      - name: Upload health-check script artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-health-check-${{ github.run_id }}
+          path: |
+            opencode-health-check.sh
+        continue-on-error: true
+
+  opencode:
+    needs: [prepare, preflight]
+    if: needs.prepare.outputs.approved == 'true' && needs.preflight.outputs.preflight_passed == 'true'
     permissions:
       contents: write
       id-token: write
       issues: write
       actions: read
       pull-requests: write
+    env:
+      CLOUDFLARED_ASSET: ${{ needs.preflight.outputs.cloudflared_asset }}
+      OPENCODE_HEARTBEAT_TIMEOUT: ${{ env.MAX_HEARTBEAT_WAIT_SECONDS }}
     uses: AgentsLoop/OhMyGithub/.github/workflows/opencode-reusable.yml@1ed0818c6f6bde3293b127c17668fcad4b02c347
     with:
       runtime_ref: 1ed0818c6f6bde3293b127c17668fcad4b02c347
@@ -54,28 +274,82 @@ jobs:
       AGENTSWEB_SSH_PUBLIC_KEY: ${{ secrets.AGENTSWEB_SSH_PUBLIC_KEY }}
 
   collect-failure-info:
-    needs: opencode
+    needs: [preflight, opencode]
     if: always()
     runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: read
+      issues: write
     steps:
+      - name: Snapshot environment
+        run: |
+          set -euxo pipefail
+          echo "RUNNER_OS=${RUNNER_OS:-}" > env-snapshot.txt
+          echo "RUNNER_ARCH=${RUNNER_ARCH:-}" >> env-snapshot.txt
+          echo "CLOUDFLARED_ASSET=${CLOUDFLARED_ASSET:-${{ needs.preflight.outputs.cloudflared_asset }}}" >> env-snapshot.txt
+          echo "OPENCODE_WEB_PORT=${OPENCODE_WEB_PORT:-${DEFAULT_OPENCODE_WEB_PORT}}" >> env-snapshot.txt
+          echo "WORKFLOW_RUN=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> env-snapshot.txt
+          env | sort >> env-snapshot.txt || true
+          cat env-snapshot.txt
+
+      - name: Download preflight artifacts (health-check, cached binary)
+        uses: actions/download-artifact@v4
+        with:
+          name: opencode-health-check-${{ github.run_id }}
+          path: ./preflight-artifacts
+        continue-on-error: true
+
+      - name: Health-check wait + tail logs while waiting
+        run: |
+          set -euxo pipefail
+          PORT=${OPENCODE_WEB_PORT:-${DEFAULT_OPENCODE_WEB_PORT}}
+          URL="http://127.0.0.1:${PORT}/omgithub/heartbeat"
+          MAX_WAIT=${MAX_HEARTBEAT_WAIT_SECONDS:-120}
+          echo "Checking heartbeat at $URL for up to ${MAX_WAIT}s"
+          i=0
+          while [ $i -lt $MAX_WAIT ]; do
+            if curl --fail --silent "$URL" >/dev/null 2>&1; then
+              echo "heartbeat is up at $URL"
+              break
+            fi
+            i=$((i+5))
+            echo "heartbeat not up yet; waited $i/$MAX_WAIT seconds; dumping top logs/traces"
+            # quick diagnostics while waiting
+            ss -ltnp || true
+            ps aux --sort=-%mem | head -n 20 || true
+            lsof -i -P -n | head -n 40 || true
+            sleep 5
+          done
+          if [ $i -ge $MAX_WAIT ]; then
+            echo "::warning::Heartbeat did not become available after ${MAX_WAIT}s"
+          fi
+
+      - name: Pull runner-level diagnostics
+        run: |
+          set -euxo pipefail
+          echo "Open files (top 200):" > diag.txt || true
+          lsof -nP -iTCP -sTCP:LISTEN | head -n 200 >> diag.txt || true
+          echo "Netstat/ss output:" >> diag.txt || true
+          ss -ltnp >> diag.txt || netstat -ltnp >> diag.txt || true
+          echo "Top processes:" >> diag.txt
+          ps aux --sort=-%mem | head -n 200 >> diag.txt || true
+          head -n 200 /var/log/syslog 2>/dev/null || true
+
       - name: Download workflow logs
         env:
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
         run: |
+          set -euxo pipefail
           echo "Downloading workflow logs for $REPO run $RUN_ID"
-          # Download the workflow run logs as a zip and save them for inspection.
           curl -sSL -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             -L "https://api.github.com/repos/$REPO/actions/runs/$RUN_ID/logs" -o workflow-logs.zip || echo "curl failed"
 
       - name: Extract OpenCode logs from workflow logs
-        if: always()
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           rm -rf workflow-logs || true
           mkdir -p workflow-logs
           if [ -s workflow-logs.zip ]; then
@@ -84,8 +358,6 @@ jobs:
           else
             echo "workflow-logs.zip not present or empty"
           fi
-
-          # Try to find common OpenCode runtime log filenames and copy them to the root for easy upload
           for name in opencode-run.log lifecycle.log opencode-response.json response-comment-tracker.log; do
             found=$(find workflow-logs -type f -iname "*$name" | head -n 1 || true)
             if [ -n "$found" ]; then
@@ -95,8 +367,6 @@ jobs:
               echo "$name not found in workflow logs"
             fi
           done
-
-          # Also create small extracts (first/last 200 lines) for quick inspection
           for f in opencode-run.log lifecycle.log response-comment-tracker.log; do
             if [ -f "$f" ]; then
               head -n 200 "$f" > "${f}.head" || true
@@ -104,23 +374,14 @@ jobs:
             fi
           done
 
-      - name: Save run metadata and runner snapshot
-        run: |
-          printf 'run_url=%s\n' "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" > run-info.txt
-          printf 'run_id=%s\n' "${{ github.run_id }}" >> run-info.txt
-          uname -a > runner-info.txt || true
-          lsb_release -a 2>/dev/null || true
-          node --version 2>/dev/null || true
-          npm --version 2>/dev/null || true
-
-      - name: Upload logs artifact
+      - name: Upload debug artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: workflow-logs-${{ github.run_id }}
+          name: opencode-debug-logs-${{ github.run_id }}
           path: |
+            env-snapshot.txt
+            diag.txt
             workflow-logs.zip
-            run-info.txt
-            runner-info.txt
             opencode-run.log
             opencode-run.log.head
             opencode-run.log.tail
@@ -129,3 +390,17 @@ jobs:
             lifecycle.log.tail
             opencode-response.json
             response-comment-tracker.log
+            preflight-artifacts/*
+
+      - name: Comment on issue if preflight failed
+        if: needs.preflight.outputs.preflight_passed == 'false'
+        run: |
+          set -euxo pipefail
+          ISSUE=${{ needs.prepare.outputs.issue_number }}
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          BODY=":warning: OpenCode preflight failed. I collected diagnostics and uploaded artifacts to the workflow run. See the run details: ${RUN_URL}\n\nIf you want me to try a fresh preflight run I can, or I can open a PR with further fixes."
+          API_URL="https://api.github.com/repos/${{ github.repository }}/issues/${ISSUE}/comments"
+          curl -sS -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg body "$BODY" '{body: $body}')" \
+            "$API_URL" || true
