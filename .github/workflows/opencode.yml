@@ -72,6 +72,38 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -L "https://api.github.com/repos/$REPO/actions/runs/$RUN_ID/logs" -o workflow-logs.zip || echo "curl failed"
 
+      - name: Extract OpenCode logs from workflow logs
+        if: always()
+        run: |
+          set -euo pipefail
+          rm -rf workflow-logs || true
+          mkdir -p workflow-logs
+          if [ -s workflow-logs.zip ]; then
+            unzip -q workflow-logs.zip -d workflow-logs || true
+            echo "unzipped workflow logs to workflow-logs/"
+          else
+            echo "workflow-logs.zip not present or empty"
+          fi
+
+          # Try to find common OpenCode runtime log filenames and copy them to the root for easy upload
+          for name in opencode-run.log lifecycle.log opencode-response.json response-comment-tracker.log; do
+            found=$(find workflow-logs -type f -iname "*$name" | head -n 1 || true)
+            if [ -n "$found" ]; then
+              echo "Found $name at $found"
+              cp "$found" "${name}" || true
+            else
+              echo "$name not found in workflow logs"
+            fi
+          done
+
+          # Also create small extracts (first/last 200 lines) for quick inspection
+          for f in opencode-run.log lifecycle.log response-comment-tracker.log; do
+            if [ -f "$f" ]; then
+              head -n 200 "$f" > "${f}.head" || true
+              tail -n 200 "$f" > "${f}.tail" || true
+            fi
+          done
+
       - name: Save run metadata and runner snapshot
         run: |
           printf 'run_url=%s\n' "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" > run-info.txt
@@ -89,3 +121,11 @@ jobs:
             workflow-logs.zip
             run-info.txt
             runner-info.txt
+            opencode-run.log
+            opencode-run.log.head
+            opencode-run.log.tail
+            lifecycle.log
+            lifecycle.log.head
+            lifecycle.log.tail
+            opencode-response.json
+            response-comment-tracker.log
