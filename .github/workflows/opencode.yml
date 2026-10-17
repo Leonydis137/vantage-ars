@@ -52,3 +52,40 @@ jobs:
       OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
       OPENCODE_AUTH_JSON: ${{ secrets.OPENCODE_AUTH_JSON }}
       AGENTSWEB_SSH_PUBLIC_KEY: ${{ secrets.AGENTSWEB_SSH_PUBLIC_KEY }}
+
+  collect-failure-info:
+    needs: opencode
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Download workflow logs
+        env:
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          echo "Downloading workflow logs for $REPO run $RUN_ID"
+          # Download the workflow run logs as a zip and save them for inspection.
+          curl -sSL -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            -L "https://api.github.com/repos/$REPO/actions/runs/$RUN_ID/logs" -o workflow-logs.zip || echo "curl failed"
+
+      - name: Save run metadata and runner snapshot
+        run: |
+          printf 'run_url=%s\n' "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" > run-info.txt
+          printf 'run_id=%s\n' "${{ github.run_id }}" >> run-info.txt
+          uname -a > runner-info.txt || true
+          lsb_release -a 2>/dev/null || true
+          node --version 2>/dev/null || true
+          npm --version 2>/dev/null || true
+
+      - name: Upload logs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflow-logs-${{ github.run_id }}
+          path: |
+            workflow-logs.zip
+            run-info.txt
+            runner-info.txt
