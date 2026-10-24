@@ -1,856 +1,523 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
-import { PublicFrame } from "@/components/public/site-frame";
-import {
-  InfraIcon,
-  LiveNode,
-  NetworkIcon,
-  QuoteIcon,
-  SignalBars,
-  VoipIcon,
-} from "@/components/public/motion-icons";
-import { PathExhibit } from "@/components/public/live-field";
-import { DecodeText } from "@/components/public/decode-text";
-import { CountUp } from "@/components/public/count-up";
-import { SignalPath } from "@/components/public/signal-path";
-import { Reveal } from "@/components/public/reveal";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  submitPublicEnquiry,
-  submitPaymentNotice,
-  getPaymentMethods,
-} from "@/lib/office/api";
-import { SERVICE_PAGES } from "@/lib/site/services";
-import { SERVICE_LINES, publicRateRows } from "@/lib/office/catalogue";
-import {
-  businessJsonLd,
-  faqJsonLd,
-  pageHead,
-  SITE_URL,
-  jsonLd,
-} from "@/lib/site/seo";
+/*
+ * Vantage-ARS premium public brand system
+ * - dark operational aesthetic
+ * - premium service-business feel
+ * - stronger conversion and imagery support
+ */
 
-const LINE_ICONS = [VoipIcon, NetworkIcon, InfraIcon] as const;
+@import "tailwindcss";
 
-const STEPS = [
-  {
-    n: "01",
-    title: "Diagnose remotely first",
-    body: "Endpoint and network symptoms, plus the call-path details you can provide.",
-  },
-  {
-    n: "02",
-    title: "Written quote",
-    body: "Scope, hours, travel and VAT fixed in writing. Nothing starts until you accept.",
-  },
-  {
-    n: "03",
-    title: "Configure and test",
-    body: "The agreed work is done and tested against the checks we set with you.",
-  },
-] as const;
+@theme {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Instrument Serif", ui-serif, Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-const STATS = [
-  { value: 690, prefix: "R", suffix: " / hr", label: "Remote support, from" },
-  { value: 805, prefix: "R", suffix: " / hr", label: "On-site, by arrangement" },
-  { value: 3, label: "Departments on this desk" },
-  { value: 0, label: "Retainers and SLA promises" },
-] as const;
+  --color-bg: #f3f6fb;
+  --color-surface: #ffffff;
+  --color-raised: #e6eef8;
+  --color-fg: #122033;
+  --color-muted: #4d6078;
+  --color-subtle: #5f7186;
+  --color-accent: #0c5cab;
+  --color-accent-fg: #f7fbff;
+  --color-border: #d5e0ee;
+  --color-ring: #0c5cab;
+  --color-ok: #0f7a4a;
+  --color-warn: #9a6208;
+  --color-danger: #b42318;
 
-export const Route = createFileRoute("/")({
-  head: () => {
-    const head = pageHead({
-      title: "VoIP, networking & IT infrastructure · Vantage-ARS",
-      description:
-        "Worldwide remote VoIP, networking and IT infrastructure support from Vantage-ARS, with clear ZAR pricing and a written quote before work starts.",
-      path: "/",
-    });
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
 
-    return {
-      ...head,
-      scripts: [
-        businessJsonLd(),
-        faqJsonLd([
-          {
-            q: "How do I get a quote?",
-            a: "Send the enquiry form. You get a written quote with scope and total before anyone starts.",
-          },
-          {
-            q: "Do you charge VAT?",
-            a: "VAT is added only when the written quote says so.",
-          },
-          {
-            q: "Do you offer managed support?",
-            a: "No. There is no retainer or SLA — you pay for agreed work.",
-          },
-        ]),
-        jsonLd({
-          "@context": "https://schema.org",
-          "@type": "WebSite",
-          name: "Vantage-ARS",
-          url: SITE_URL,
-        }),
-      ],
-    };
-  },
+  --shadow-border: 0 0 0 1px rgb(18 32 51 / 0.08);
+  --shadow-border-hover: 0 0 0 1px rgb(18 32 51 / 0.16);
 
-  loader: () => getPaymentMethods(),
-
-  component: HomePage,
-});
-
-function HomePage() {
-  const payment = Route.useLoaderData();
-  const rates = publicRateRows();
-
-  return (
-    <PublicFrame>
-      <section
-        className="relative pb-16 pt-16 lg:pt-24"
-        onMouseMove={(event) => {
-          const el = event.currentTarget;
-          const rect = el.getBoundingClientRect();
-
-          el.style.setProperty(
-            "--mx",
-            `${event.clientX - rect.left}px`,
-          );
-
-          el.style.setProperty(
-            "--my",
-            `${event.clientY - rect.top}px`,
-          );
-        }}
-      >
-        <div
-          aria-hidden
-          className="spotlight pointer-events-none absolute inset-0 overflow-hidden"
-        />
-
-        <div className="grid items-start gap-12 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="relative">
-            <p className="enter-up flex items-center gap-2.5 font-mono text-xs tracking-[0.22em] text-accent uppercase">
-              <span
-                className="live-dot size-1.5 rounded-full bg-ok"
-                aria-hidden="true"
-              />
-              <DecodeText text="VoIP · Networking · IT infrastructure" />
-            </p>
-
-            <h1 className="enter-up d-1 mt-5 max-w-3xl text-5xl leading-[1.02] tracking-[-0.03em] sm:text-7xl">
-              Clear scope.{" "}
-              <span className="bg-gradient-to-r from-accent to-ok bg-clip-text text-transparent">
-                Written quote.
-              </span>{" "}
-              No surprises.
-            </h1>
-
-            <p className="enter-up d-2 mt-6 max-w-2xl text-lg leading-relaxed text-muted">
-              Worldwide remote support from R690 an hour, on-site by
-              arrangement from R805 an hour. You see the scope, timing and
-              total in writing before anyone starts.
-            </p>
-
-            <div className="enter-up d-3 mt-8 flex flex-wrap gap-3">
-              <Link
-                to="/"
-                hash="enquiry"
-                className="cta inline-flex h-11 items-center rounded-md px-5 text-sm font-semibold"
-              >
-                Get a written quote
-              </Link>
-
-              <Link
-                to="/rates"
-                className="cta-ghost inline-flex h-11 items-center rounded-md px-5 text-sm font-semibold"
-              >
-                See published rates
-              </Link>
-            </div>
-          </div>
-
-          <div className="enter-up d-2 panel rounded-2xl">
-            <div className="flex items-center justify-between border-b border-border px-6 py-4">
-              <p className="flex items-center gap-2 font-mono text-[11px] tracking-[0.2em] text-fg uppercase">
-                <LiveNode className="size-4" aria-hidden="true" />
-                Departments
-              </p>
-
-              <p className="font-mono text-[11px] tracking-[0.16em] text-ok uppercase">
-                Desk open
-              </p>
-            </div>
-
-            <ul className="divide-y divide-border">
-              {SERVICE_LINES.map((line, index) => {
-                const Icon = LINE_ICONS[index] ?? VoipIcon;
-                const page = SERVICE_PAGES[index];
-
-                return (
-                  <li key={line.number}>
-                    <Link
-                      to="/services/$slug"
-                      params={{ slug: page.slug }}
-                      className="group flex items-center gap-4 px-6 py-4 transition-colors hover:bg-raised/60"
-                    >
-                      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-raised">
-                        <Icon
-                          className="size-5 text-accent"
-                          aria-hidden="true"
-                        />
-                      </span>
-
-                      <span className="min-w-0 flex-1">
-                        <span className="block font-semibold text-fg group-hover:text-accent">
-                          {line.title}
-                        </span>
-
-                        <span className="mt-0.5 block text-sm text-muted">
-                          {line.price}
-                        </span>
-                      </span>
-
-                      <SignalBars
-                        className="size-4 shrink-0 text-ok"
-                        aria-hidden="true"
-                      />
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-
-            <div className="border-t border-border px-6 py-4">
-              <Link
-                to="/services/$slug"
-                params={{ slug: "voip" }}
-                className="inline-flex items-center gap-2 font-mono text-[11px] tracking-[0.18em] text-accent uppercase hover:underline"
-              >
-                Open a department
-                <QuoteIcon
-                  className="size-3.5"
-                  aria-hidden="true"
-                />
-              </Link>
-            </div>
-          </div>
-        </div>
-
-        <PathExhibit />
-      </section>
-
-      <section className="border-y border-border" aria-label="Desk facts">
-        <dl className="grid divide-border sm:grid-cols-2 sm:divide-x lg:grid-cols-4">
-          {STATS.map((stat, index) => (
-            <Reveal
-              key={stat.label}
-              delay={
-                index === 0
-                  ? undefined
-                  : (index as 1 | 2 | 3)
-              }
-              className="p-6 sm:p-8"
-            >
-              <dd className="font-mono text-3xl font-semibold tabular-nums text-fg sm:text-4xl">
-                <CountUp
-                  value={stat.value}
-                  prefix={"prefix" in stat ? stat.prefix : ""}
-                  suffix={"suffix" in stat ? stat.suffix : ""}
-                />
-              </dd>
-
-              <dt className="mt-2 text-sm text-muted">
-                {stat.label}
-              </dt>
-            </Reveal>
-          ))}
-        </dl>
-      </section>
-
-      <section
-        id="services"
-        className="border-b border-border py-16"
-        aria-label="Departments"
-      >
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <h2 className="text-4xl sm:text-5xl">
-            Three departments, one desk
-          </h2>
-
-          <p className="font-mono text-xs tracking-[0.18em] text-subtle uppercase">
-            Pick what stopped
-          </p>
-        </div>
-
-        <div className="mt-8 border-t border-border">
-          {SERVICE_PAGES.map((page, index) => {
-            const Icon = LINE_ICONS[index] ?? VoipIcon;
-
-            return (
-              <Link
-                key={page.slug}
-                to="/services/$slug"
-                params={{ slug: page.slug }}
-                className="group grid gap-3 border-b border-border px-2 py-6 transition-colors hover:bg-raised/50 sm:grid-cols-[3rem_1fr_10rem_2rem] sm:items-center sm:gap-6 sm:px-4"
-              >
-                <span className="flex size-11 items-center justify-center rounded-xl border border-border bg-raised">
-                  <Icon
-                    className="size-6 text-accent"
-                    aria-hidden="true"
-                  />
-                </span>
-
-                <span>
-                  <span className="flex items-baseline gap-3">
-                    <span className="font-mono text-xs text-subtle">
-                      {page.number}
-                    </span>
-
-                    <span className="text-2xl group-hover:text-accent sm:text-3xl">
-                      {page.title}
-                    </span>
-                  </span>
-
-                  <span className="mt-2 block max-w-xl text-sm leading-relaxed text-muted">
-                    {page.description}
-                  </span>
-                </span>
-
-                <span className="font-mono text-sm text-accent sm:text-right">
-                  {SERVICE_LINES[index]?.price ?? "From R690 / hour"}
-                </span>
-
-                <span
-                  aria-hidden
-                  className="hidden text-subtle transition-transform group-hover:translate-x-1 group-hover:text-accent sm:block"
-                >
-                  &#8594;
-                </span>
-              </Link>
-            );
-          })}
-        </div>
-      </section>
-
-      <SignalPath />
-
-      <section
-        className="border-t border-border py-16"
-        aria-label="How a job runs"
-      >
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <h2 className="text-4xl sm:text-5xl">
-            How a job runs
-          </h2>
-
-          <p className="font-mono text-xs tracking-[0.18em] text-subtle uppercase">
-            Same path every time
-          </p>
-        </div>
-
-        <ol className="mt-8 grid gap-4 md:grid-cols-3">
-          {STEPS.map((step, index) => (
-            <li
-              key={step.n}
-              className={`panel rounded-2xl p-6 ${
-                index === 1
-                  ? "enter-up d-1"
-                  : index === 2
-                    ? "enter-up d-2"
-                    : "enter-up"
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <p className="font-mono text-sm text-accent">
-                  {step.n}
-                </p>
-
-                <QuoteIcon
-                  className="size-5 text-subtle"
-                  aria-hidden="true"
-                />
-              </div>
-
-              <h3 className="mt-4 text-2xl">
-                {step.title}
-              </h3>
-
-              <p className="mt-2 text-sm leading-relaxed text-muted">
-                {step.body}
-              </p>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <section
-        id="prices"
-        className="border-t border-border py-16"
-        aria-label="Prices"
-      >
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <h2 className="text-4xl sm:text-5xl">
-            Published rates
-          </h2>
-
-          <p className="font-mono text-xs tracking-[0.18em] text-subtle uppercase">
-            South African rand
-          </p>
-        </div>
-
-        <p className="mt-3 max-w-xl text-base text-muted">
-          VAT is added only when the written quote says so.{" "}
-          <Link
-            to="/rates"
-            className="text-accent underline-offset-4 hover:underline"
-          >
-            Full rate sheet
-          </Link>
-          .
-        </p>
-
-        <ul className="mt-8 border-t border-border">
-          {rates.slice(0, 6).map((rate) => (
-            <li
-              key={rate.id}
-              className="grid gap-2 border-b border-border py-5 transition-colors hover:bg-raised/40 sm:grid-cols-[1fr_10rem] sm:gap-8"
-            >
-              <div>
-                <h3 className="text-base font-semibold text-fg">
-                  {rate.title}
-                </h3>
-
-                <p className="mt-1 text-sm text-muted">
-                  {rate.scope}
-                </p>
-              </div>
-
-              <p className="font-mono text-sm font-medium text-accent sm:text-right">
-                {rate.price}
-              </p>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section
-        className="border-t border-border py-16"
-        aria-label="Forms"
-      >
-        <div className="grid gap-8 lg:grid-cols-2">
-          <div
-            id="enquiry"
-            className="scroll-mt-24"
-            aria-label="Enquiry"
-          >
-            <p className="font-mono text-xs tracking-[0.2em] text-accent uppercase">
-              01 · Enquiry
-            </p>
-
-            <h2 className="mt-4 text-4xl sm:text-5xl">
-              Ask for a quote
-            </h2>
-
-            <p className="mt-3 max-w-md text-sm leading-relaxed text-muted">
-              A few sentences are enough. This is not a contract — you
-              get a written quote first.
-            </p>
-
-            <div className="mt-8">
-              <EnquiryForm />
-            </div>
-          </div>
-
-          <div
-            id="payment"
-            className="scroll-mt-24"
-            aria-label="Payment"
-          >
-            <p className="font-mono text-xs tracking-[0.2em] text-accent uppercase">
-              02 · Payment notice
-            </p>
-
-            <h2 className="mt-4 text-4xl sm:text-5xl">
-              Paid already? Tell us.
-            </h2>
-
-            <p className="mt-3 max-w-md text-sm leading-relaxed text-muted">
-              Send the reference from your quote or invoice. This records
-              your notice — it is not an automatic receipt.
-            </p>
-
-            <div className="mt-8">
-              <PaymentForm payment={payment} />
-            </div>
-          </div>
-        </div>
-      </section>
-    </PublicFrame>
-  );
+  --motion-fast: 160ms;
+  --motion-medium: 320ms;
+  --motion-slow: 520ms;
 }
 
-function EnquiryForm() {
-  const [pending, setPending] = useState(false);
-  const [done, setDone] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    message: "",
-    website: "",
-  });
-
-  async function onSubmit(event: FormEvent) {
-    event.preventDefault();
-    setPending(true);
-    setError(null);
-
-    try {
-      const result = await submitPublicEnquiry({
-        data: form,
-      });
-
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-
-      setDone(true);
-    } catch {
-      setError(
-        "The enquiry could not be sent. Try again in a moment.",
-      );
-    } finally {
-      setPending(false);
-    }
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
   }
 
-  if (done) {
-    return (
-      <div className="panel rounded-2xl p-6">
-        <p className="text-3xl text-ok">
-          Received.
-        </p>
-
-        <p className="mt-3 text-sm text-muted">
-          Your enquiry is recorded. You will get a written quote before
-          any work is agreed.
-        </p>
-      </div>
-    );
+  html,
+  body,
+  #app {
+    min-height: 100%;
+    background:
+      radial-gradient(circle at top, rgba(12, 92, 171, 0.06), transparent 30%), var(--color-bg);
+    color: var(--color-fg);
   }
 
-  return (
-    <form
-      onSubmit={onSubmit}
-      className="glass space-y-4 rounded-2xl p-5"
-    >
-      <div>
-        <Label htmlFor="enquiry-name">
-          Your name
-        </Label>
+  body {
+    font-family: var(--font-sans);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
 
-        <Input
-          id="enquiry-name"
-          className="mt-2"
-          autoComplete="name"
-          required
-          maxLength={120}
-          value={form.name}
-          onChange={(event) =>
-            setForm({
-              ...form,
-              name: event.target.value,
-            })
-          }
-        />
-      </div>
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
 
-      <div>
-        <Label htmlFor="enquiry-email">
-          Email
-        </Label>
+  p {
+    text-wrap: pretty;
+  }
 
-        <Input
-          id="enquiry-email"
-          type="email"
-          className="mt-2"
-          autoComplete="email"
-          required
-          maxLength={254}
-          value={form.email}
-          onChange={(event) =>
-            setForm({
-              ...form,
-              email: event.target.value,
-            })
-          }
-        />
-      </div>
+  a {
+    text-decoration: none;
+  }
 
-      <div>
-        <Label htmlFor="enquiry-message">
-          What do you need?
-        </Label>
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
 
-        <Textarea
-          id="enquiry-message"
-          className="mt-2"
-          required
-          minLength={5}
-          maxLength={3000}
-          rows={5}
-          placeholder="What stopped working, or what you want set up."
-          value={form.message}
-          onChange={(event) =>
-            setForm({
-              ...form,
-              message: event.target.value,
-            })
-          }
-        />
-      </div>
+  :focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--color-accent) 60%, white);
+    outline-offset: 4px;
+    border-radius: var(--radius-sm);
+  }
 
-      <div
-        className="h-0 overflow-hidden"
-        aria-hidden="true"
-      >
-        Leave this field empty
-
-        <input
-          tabIndex={-1}
-          autoComplete="off"
-          value={form.website}
-          onChange={(event) =>
-            setForm({
-              ...form,
-              website: event.target.value,
-            })
-          }
-        />
-      </div>
-
-      {error ? (
-        <p
-          role="alert"
-          className="text-sm text-danger"
-        >
-          {error}
-        </p>
-      ) : null}
-
-      <Button
-        type="submit"
-        disabled={pending}
-        className="cta w-full border-0 sm:w-auto"
-      >
-        {pending
-          ? "Sending…"
-          : "Request a quote"}
-      </Button>
-    </form>
-  );
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent) 35%, transparent);
+    color: var(--color-fg);
+  }
 }
 
-function PaymentForm({
-  payment,
-}: {
-  payment: unknown;
-}) {
-  const [pending, setPending] = useState(false);
-  const [done, setDone] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+.site {
+  --color-bg: #02060e;
+  --color-surface: #0a1322;
+  --color-raised: #121e33;
+  --color-fg: #f2f6fd;
+  --color-muted: #aebfd9;
+  --color-subtle: #8496b8;
+  --color-accent: #5cc8ff;
+  --color-accent-fg: #02182b;
+  --color-border: #24334f;
+  --color-ring: #5cc8ff;
+  --color-ok: #45e0a6;
+  --color-warn: #ffc94d;
+  --color-danger: #ff8080;
 
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    reference: "",
-    amount: "",
-    website: "",
-  });
+  --font-serif: "Space Grotesk", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
 
-  async function onSubmit(event: FormEvent) {
-    event.preventDefault();
-    setPending(true);
-    setError(null);
+  --shadow-border: 0 0 0 1px rgb(255 255 255 / 0.09);
+  --shadow-border-hover: 0 0 0 1px rgb(92 200 255 / 0.45);
+  --shadow-panel: 0 1px 0 0 rgb(255 255 255 / 0.05) inset, 0 24px 48px -24px rgb(0 0 0 / 0.85);
+  --glow-accent: 0 0 20px rgb(92 200 255 / 0.3);
 
-    try {
-      const result = await submitPaymentNotice({
-        data: form,
-      });
+  --mesh-line: rgba(92, 200, 255, 0.14);
+  --mesh-node: rgba(92, 200, 255, 0.45);
+  --mesh-packet: rgba(140, 220, 255, 0.95);
+  --aurora-a: rgba(38, 110, 255, 0.13);
+  --aurora-b: rgba(0, 214, 200, 0.08);
 
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
+  background: transparent;
+  color: var(--color-fg);
+}
 
-      setDone(true);
-    } catch {
-      setError(
-        "The notice could not be recorded. Try again in a moment.",
-      );
-    } finally {
-      setPending(false);
-    }
+.site :is(h1, h2, h3, .font-serif) {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+html:has(.site),
+html:has(.site) body {
+  background:
+    radial-gradient(1200px 600px at 85% -10%, var(--aurora-a, rgba(38, 110, 255, 0.13)), transparent 60%),
+    radial-gradient(900px 500px at -10% 30%, var(--aurora-b, rgba(0, 214, 200, 0.08)), transparent 55%),
+    #02060e;
+}
+
+@keyframes enter-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
   }
-
-  if (done) {
-    return (
-      <div className="panel rounded-2xl p-6">
-        <p className="text-3xl text-ok">
-          Noted.
-        </p>
-
-        <p className="mt-3 text-sm text-muted">
-          Your payment notice is recorded. A receipt follows after it is
-          checked.
-        </p>
-      </div>
-    );
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
+}
 
-  const methods = Array.isArray(payment)
-    ? (payment as { detail: string }[])
-    : [];
-
-  return (
-    <form
-      onSubmit={onSubmit}
-      className="glass space-y-4 rounded-2xl p-5"
-    >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <Label htmlFor="pay-name">
-            Name on payment
-          </Label>
-
-          <Input
-            id="pay-name"
-            className="mt-2"
-            required
-            value={form.name}
-            onChange={(event) =>
-              setForm({
-                ...form,
-                name: event.target.value,
-              })
-            }
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="pay-email">
-            Email
-          </Label>
-
-          <Input
-            id="pay-email"
-            type="email"
-            className="mt-2"
-            required
-            value={form.email}
-            onChange={(event) =>
-              setForm({
-                ...form,
-                email: event.target.value,
-              })
-            }
-          />
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <Label htmlFor="pay-ref">
-            Reference (VA-…)
-          </Label>
-
-          <Input
-            id="pay-ref"
-            className="mt-2"
-            required
-            placeholder="VA-XXXX"
-            value={form.reference}
-            onChange={(event) =>
-              setForm({
-                ...form,
-                reference: event.target.value,
-              })
-            }
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="pay-amount">
-            Amount (R)
-          </Label>
-
-          <Input
-            id="pay-amount"
-            className="mt-2"
-            required
-            inputMode="decimal"
-            pattern="[0-9]+([.,][0-9]+)?"
-            title="Enter the amount in rand, for example 690.00"
-            placeholder="690.00"
-            value={form.amount}
-            onChange={(event) =>
-              setForm({
-                ...form,
-                amount: event.target.value,
-              })
-            }
-          />
-        </div>
-      </div>
-
-      <div
-        className="h-0 overflow-hidden"
-        aria-hidden="true"
-      >
-        Leave this field empty
-
-        <input
-          tabIndex={-1}
-          autoComplete="off"
-          value={form.website}
-          onChange={(event) =>
-            setForm({
-              ...form,
-              website: event.target.value,
-            })
-          }
-        />
-      </div>
-
-      {error ? (
-        <p className="text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
-
-      {methods.length > 0 &&
-      methods.every((m) =>
-        m.detail.includes("sent with"),
-      ) ? (
-        <p className="text-xs text-subtle">
-          Bank details are sent with your quote or invoice.
-        </p>
-      ) : null}
-
-      <Button
-        type="submit"
-        disabled={pending}
-        className="cta w-full border-0 sm:w-auto"
-      >
-        {pending
-          ? "Sending…"
-          : "Notify payment"}
-      </Button>
-    </form>
-  );
+@keyframes enter-fade {
+  from {
+    opacity: 0;
   }
+  to {
+    opacity: 1;
+  }
+}
+
+.enter-up {
+  animation: enter-up var(--motion-medium) cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.enter-fade {
+  animation: enter-fade var(--motion-slow) ease both;
+}
+
+.d-1 { animation-delay: 90ms; }
+.d-2 { animation-delay: 180ms; }
+.d-3 { animation-delay: 270ms; }
+.d-4 { animation-delay: 360ms; }
+
+@keyframes pulse-live {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgb(61 220 151 / 0.5);
+  }
+  50% {
+    opacity: 0.65;
+    box-shadow: 0 0 0 5px rgb(61 220 151 / 0);
+  }
+}
+
+.live-dot {
+  animation: pulse-live 2.2s ease-in-out infinite;
+}
+
+@keyframes float-subtle {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+  100% { transform: translateY(0px); }
+}
+
+.float-subtle {
+  animation: float-subtle var(--motion-slow) ease-in-out infinite;
+}
+
+.site .glass {
+  background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+  border: 1px solid var(--color-border);
+  backdrop-filter: blur(10px) saturate(130%);
+}
+
+.site .panel {
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.035), rgb(255 255 255 / 0) 40%), var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-panel);
+}
+
+.site .panel-hover {
+  transition: transform var(--motion-fast) ease, border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
+}
+
+.site .panel-hover:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+  box-shadow: var(--shadow-panel), var(--glow-accent);
+}
+
+.site .hairline {
+  border-color: var(--color-border);
+}
+
+.site .cta {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-accent) 88%, white), var(--color-accent));
+  color: var(--color-accent-fg);
+  box-shadow: var(--glow-accent);
+  transition: transform var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
+}
+
+.site .cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 32px rgb(76 194 255 / 0.45);
+}
+
+.site .cta::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 0.35) 50%, transparent 70%);
+  transform: translateX(-120%);
+  transition: transform 0.6s ease;
+}
+
+.site .cta:hover::after {
+  transform: translateX(120%);
+}
+
+.site .cta-ghost {
+  border: 1px solid var(--color-border);
+  color: var(--color-fg);
+  background: color-mix(in srgb, var(--color-surface) 60%, transparent);
+  transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease, transform var(--motion-fast) ease;
+}
+
+.site .cta-ghost:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
+  background: var(--color-raised);
+  transform: translateY(-2px);
+}
+
+.site .nav-link {
+  position: relative;
+  color: var(--color-muted);
+  transition: color var(--motion-fast) ease;
+}
+
+.site .nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 1px;
+  background: var(--color-accent);
+  box-shadow: var(--glow-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--motion-fast) ease;
+}
+
+.site .nav-link:hover,
+.site .nav-link[data-status="active"] {
+  color: var(--color-fg);
+}
+
+.site .nav-link:hover::after,
+.site .nav-link[data-status="active"]::after {
+  transform: scaleX(1);
+}
+
+.story-visual {
+  position: relative;
+  overflow: hidden;
+}
+
+.story-visual::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(2, 6, 14, 0.08), rgba(2, 6, 14, 0.22));
+}
+
+.feature-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.feature-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 5px;
+  height: 100%;
+  background: linear-gradient(180deg, rgba(92, 200, 255, 0.9), rgba(69, 224, 166, 0.9));
+}
+
+@keyframes mi-ring {
+  0% { transform: scale(0.35); opacity: 0; }
+  18% { opacity: 0.85; }
+  100% { transform: scale(1); opacity: 0; }
+}
+
+@keyframes mi-ping {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  80%, 100% { transform: scale(1.9); opacity: 0; }
+}
+
+@keyframes mi-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+@keyframes mi-bars {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+
+.site .mi-ring {
+  transform-origin: center;
+  animation: mi-ring 2.4s ease-out infinite;
+}
+.site .mi-ring-2 { animation-delay: 0.8s; }
+.site .mi-ring-3 { animation-delay: 1.6s; }
+
+.site .mi-ping {
+  transform-origin: center;
+  animation: mi-ping 2.2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.site .mi-blink {
+  animation: mi-blink 1.6s ease-in-out infinite;
+}
+.site .mi-blink-2 { animation-delay: 0.4s; }
+.site .mi-blink-3 { animation-delay: 0.8s; }
+
+.site .mi-bar {
+  transform-origin: bottom;
+  animation: mi-bars 1.1s ease-in-out infinite;
+}
+.site .mi-bar-2 { animation-delay: 0.18s; }
+.site .mi-bar-3 { animation-delay: 0.36s; }
+.site .mi-bar-4 { animation-delay: 0.54s; }
+
+.signal-packet {
+  offset-path: path("M 16 28 H 704");
+  animation: signal-ride 7s linear infinite;
+}
+
+.mi-packet {
+  offset-path: path("M 3 12 H 21");
+  animation: signal-ride 2.6s linear infinite;
+}
+
+@keyframes mi-slide {
+  from { transform: translateX(0); }
+  to { transform: translateX(16px); }
+}
+
+.mi-slide {
+  animation: mi-slide 2.2s linear infinite;
+}
+
+@keyframes mi-scan {
+  0% { transform: translateY(-6px); opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { transform: translateY(10px); opacity: 0; }
+}
+
+.mi-scan {
+  animation: mi-scan 2.8s ease-in-out infinite;
+}
+
+@keyframes signal-ride {
+  from { offset-distance: 0%; }
+  to { offset-distance: 100%; }
+}
+
+.hero-gradient {
+  background: linear-gradient(180deg, rgb(76 194 255 / 0.07), rgb(5 10 20 / 0));
+}
+
+.card-glass {
+  background: color-mix(in srgb, var(--color-surface) 82%, transparent);
+  border: 1px solid var(--color-border);
+  backdrop-filter: blur(6px) saturate(120%);
+}
+
+.premium-cta {
+  box-shadow: 0 10px 30px rgb(76 194 255 / 0.12);
+  transform: translateZ(0);
+  transition: transform var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
+}
+.premium-cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 40px rgb(76 194 255 / 0.2);
+}
+
+#services,
+#prices,
+#enquiry,
+#payment {
+  scroll-margin-top: 5.5rem;
+}
+
+.site .reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 520ms cubic-bezier(0.22, 1, 0.36, 1), transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.site .reveal.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+.site .reveal-d1 { transition-delay: 90ms; }
+.site .reveal-d2 { transition-delay: 180ms; }
+.site .reveal-d3 { transition-delay: 270ms; }
+
+.site .spotlight {
+  background: radial-gradient(520px circle at var(--mx, 50%) var(--my, 30%), rgba(92, 200, 255, 0.08), transparent 65%);
+}
+
+.site [data-accordion-content] {
+  overflow: hidden;
+}
+
+.site [data-accordion-content][data-state="open"] {
+  animation: accordion-down 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.site [data-accordion-content][data-state="closed"] {
+  animation: accordion-up 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes accordion-down {
+  from { height: 0; }
+  to { height: var(--radix-accordion-content-height); }
+}
+
+@keyframes accordion-up {
+  from { height: var(--radix-accordion-content-height); }
+  to { height: 0; }
+}
+
+.site .fab-ring {
+  animation: fab-halo 2.4s ease-out infinite;
+}
+
+@keyframes fab-halo {
+  0% { transform: scale(0.7); opacity: 0.7; }
+  80%, 100% { transform: scale(1.6); opacity: 0; }
+}
+
+.site .spy-pill {
+  border: 1px solid var(--color-border);
+  color: var(--color-muted);
+  transition: color var(--motion-fast) ease, border-color var(--motion-fast) ease, background-color var(--motion-fast) ease;
+}
+
+.site .spy-pill:hover {
+  color: var(--color-fg);
+  border-color: color-mix(in srgb, var(--color-accent) 50%, var(--color-border));
+}
+
+.site .spy-pill[data-active="true"] {
+  color: var(--color-accent-fg);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .signal-packet { animation: none; offset-distance: 50%; }
+  .mi-packet { animation: none; offset-distance: 50%; }
+  .site .reveal { opacity: 1; transform: none; transition: none; }
+  .site [data-accordion-content][data-state="open"],
+  .site [data-accordion-content][data-state="closed"] { animation: none; height: auto; }
+  .site .fab-ring { animation: none; opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .site .feature-card {
+    padding: 1rem;
+  }
+}
